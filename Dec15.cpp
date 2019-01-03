@@ -10,7 +10,10 @@ using FighterList = std::vector<Fighter>;
 using Arena = std::vector<std::string>;
 FighterList::iterator FindFighterAt(FighterList& l, int x, int y);
 
-// Required for fill algorithm
+int diffX[] = { -1, 0, 0, 1 };
+int diffY[] = { 0, -1, 1, 0 };
+
+// Required structures for fill algorithm
 struct Point
 {
 	Point(int px = 0, int py = 0) : x(px), y(py) {}
@@ -19,9 +22,19 @@ struct Point
 	bool operator==(const Point& p) const { return x == p.x && y == p.y; }
 };
 
+struct FillInfo
+{
+	FillInfo() : from(-1, -1), distance(std::numeric_limits<int>::max()) {}
+	FillInfo(const Point& p, int d) : from(p), distance(d) {}
+	Point from;
+	int distance;
+};
+
+using FillData = std::vector<std::vector<FillInfo>>;
+
 struct Fighter
 {
-	Fighter(int px = 0, int py = 0, bool isAnElf = true) : x(px), y(py), health(200), combatPower(3), opponent(isAnElf ? 'G' :'E'), elf(isAnElf), dead(false) {}
+	Fighter(int px = 0, int py = 0, bool isAnElf = true) : x(px), y(py), health(200), combatPower(3), opponent(isAnElf ? 'G' : 'E'), elf(isAnElf), dead(false) {}
 	int x, y;
 	int health;
 	int combatPower;
@@ -32,7 +45,7 @@ struct Fighter
 	{
 		return x < f.x || (x == f.x && y < f.y);
 	}
-	
+
 	bool HasOpponentInRange(const Arena& arena) const
 	{
 		return arena[x - 1][y] == opponent || arena[x + 1][y] == opponent || arena[x][y - 1] == opponent || arena[x][y + 1] == opponent;
@@ -48,7 +61,52 @@ struct Fighter
 		if (arena[x + 1][y] == opponent) { auto tmp = FindFighterAt(list, x + 1, y); if (tmp->health < minHealth) { return tmp; } }
 		return iter;
 	}
-	
+
+	bool Move(const Arena& arena, const FighterList& fighters, FillData& fill)
+	{
+		for (auto& f : fill)
+			std::for_each(f.begin(), f.end(), [](FillInfo& fi) {fi.distance = std::numeric_limits<int>::max(); });
+		std::set<Point> step;
+		for (const Fighter& f : fighters)
+			if (!f.dead && f.elf != elf) // for each opponent
+				for (int i = 0; i < 4; ++i)
+				{
+					int nx = f.x + diffX[i], ny = f.y + diffY[i];
+					if (arena[nx][ny] == '.')
+					{
+						fill[nx][ny] = FillInfo(Point(nx, ny), 0);
+						step.insert(Point(nx, ny));
+					}
+				}
+
+		int move = -1;
+		while (!step.empty())
+		{
+			std::set<Point> nextIter;
+			for (const Point& p : step)
+				for (int i = 3; i >= 0; --i)
+				{
+					int nx = p.x + diffX[i], ny = p.y + diffY[i];
+					if (arena[nx][ny]=='.')
+						if (fill[nx][ny].distance > fill[p.x][p.y].distance + 1 ||
+							(fill[nx][ny].distance == fill[p.x][p.y].distance + 1 && fill[p.x][p.y].from < fill[nx][ny].from))
+						{
+							fill[nx][ny] = FillInfo(fill[p.x][p.y].from, fill[p.x][p.y].distance + 1);
+							nextIter.insert(Point(nx, ny));
+							if (nx == x && ny == y)
+								move = 3 - i;
+						}
+				}
+			if (move != -1)
+			{
+				x += diffX[move];
+				y += diffY[move];
+				return true;
+			}
+			std::swap(step, nextIter);
+		}
+		return false;
+	}
 };
 
 FighterList::iterator FindFighterAt(FighterList& l, int x, int y)
@@ -68,84 +126,6 @@ bool NoRemainingOpponents(const FighterList& list)
 	return e == 0 || g == 0;
 }
 
-int diffX[] = { -1, 0, 0, 1 };
-int diffY[] = { 0, -1, 1, 0 };
-
-bool Move(const Arena& arena, Fighter& f, FighterList& list)
-{
-	std::set<Point> fill;
-	fill.emplace(f.x, f.y);
-	std::set<Point> targets;
-	while (true)
-	{
-		std::set<Point> step;
-		for (const Point& p : fill)
-			for (int i = 0; i < 4; ++i)
-			{
-				Point temp(p.x + diffX[i], p.y+diffY[i]);
-				
-				char loc = arena[temp.x][temp.y];
-				if (loc == f.opponent)
-					targets.insert(p);
-				else if (loc == '.' && fill.find(temp) == fill.cend())
-					step.insert(temp);
-			}
-		
-		if (!targets.empty())
-			break;
-		if (step.empty())
-			return false; // There are no valid targets
-		fill.insert(step.cbegin(), step.cend());
-	}
-	
-	// Target to move to is the first in the set
-	fill.clear();
-	fill.insert(*targets.begin());
-	
-	// Work backward toward fighter
-	while (true)
-	{
-		std::set<Point> step;
-		int moveDirection = 4;
-		for (const Point& p : fill)
-		{
-			if (p.x + 1 == f.x && p.y == f.y)
-			{
-				--f.x;
-				return true;
-			}
-			if (arena[p.x + 1][p.y] == '.') { Point tmp(p.x + 1, p.y); if (fill.find(tmp) == fill.end()) step.insert(tmp); }
-
-			if (p.x == f.x && p.y + 1 == f.y && moveDirection > 0)
-				moveDirection = 0;
-			if (arena[p.x][p.y + 1] == '.') { Point tmp(p.x, p.y + 1); if (fill.find(tmp) == fill.end()) step.insert(tmp); }
-			
-			if (p.x == f.x && p.y - 1 == f.y && moveDirection > 1)
-				moveDirection = 1;
-			if (arena[p.x][p.y - 1] == '.') { Point tmp(p.x, p.y - 1); if (fill.find(tmp) == fill.end()) step.insert(tmp); }
-
-			if (p.x - 1 == f.x && p.y == f.y && moveDirection > 2)
-				moveDirection = 2;
-			if (arena[p.x - 1][p.y] == '.') { Point tmp(p.x - 1, p.y); if (fill.find(tmp) == fill.end()) step.insert(tmp); }
-		}
-
-		if (moveDirection < 4)
-		{
-			if (moveDirection == 0)
-				--f.y;
-			else if (moveDirection == 1)
-				++f.y;
-			else
-				++f.x;
-			return true;
-		}
-
-		if (step.empty()) //We do not have a valid path
-			return false;
-		fill.insert(step.begin(), step.end());
-	}	
-}
-
 int main(int argc, char* argv[])
 {
 	if (argc < 2)
@@ -153,7 +133,7 @@ int main(int argc, char* argv[])
 		std::cout << "Usage: Dec15.exe []" << std::endl;;
 		return -1;
 	}
-
+	
 	std::ifstream in(argv[1], std::ios::in);
 
 	std::vector<std::string> arenaBackup;
@@ -171,18 +151,17 @@ int main(int argc, char* argv[])
 			++index;
 		}
 		arenaBackup.push_back(line);
-		std::cout << line << std::endl;
 	}
+	FillData fill = FillData(arenaBackup.size(), std::vector<FillInfo>(arenaBackup[0].length()));
 
 	int elvePower = 3;
 	FighterList fighters;
 	bool stableState = false;
 	do
 	{
-		std::cout << "Combat Power " << elvePower << std::endl;
 		std::vector<std::string> arena = arenaBackup;
 		fighters.clear();
-		
+
 		fighters = fightersBackup;
 
 		for (auto& f : fighters)
@@ -208,7 +187,7 @@ int main(int argc, char* argv[])
 				if (!f.HasOpponentInRange(arena) && !stableState)
 				{
 					arena[f.x][f.y] = '.';
-					if (Move(arena, f, fighters))
+					if (f.Move(arena, fighters, fill))
 						stableState = stable = false;
 					arena[f.x][f.y] = f.elf ? 'E' : 'G';
 				}
@@ -244,14 +223,15 @@ int main(int argc, char* argv[])
 			int totalHealth = 0;
 			for (const auto& f : fighters)
 				totalHealth += f.health;
-			std::cout << "Score: " << totalHealth * rounds << ' ' << totalHealth << ' ' << rounds << std::endl;
+			std::cout << "Part 1: " << totalHealth * rounds << std::endl;
 		}
 		else if (std::count_if(fighters.cbegin(), fighters.cend(), [](const Fighter& f) {return f.elf; }) == elves)
 		{
 			int totalHealth = 0;
 			for (const auto& f : fighters)
 				totalHealth += f.health;
-			std::cout << "Score: " << totalHealth * rounds << ' ' << totalHealth << ' ' << rounds << ' ' << elvePower << std::endl;
+			
+			std::cout << "Part 2: " << totalHealth * rounds << std::endl;
 		}
 		++elvePower;
 	} while (std::count_if(fighters.cbegin(), fighters.cend(), [](const Fighter& f) {return f.elf; }) != elves);

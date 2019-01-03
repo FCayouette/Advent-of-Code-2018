@@ -9,10 +9,7 @@ const std::string instructionNames[] = { "addr", "addi","mulr", "muli", "banr", 
 
 struct Instruction
 {
-	Instruction(const std::string& operation, int A, int B, int C) : a(A), b(B), c(C) 
-	{
-		opCode = std::find(&(instructionNames[0]), &(instructionNames[16]), operation) - &(instructionNames[0]);
-	}
+	Instruction(const std::string& operation, int A, int B, int C) : opCode(std::find(&(instructionNames[0]), &(instructionNames[16]), operation) - &(instructionNames[0])), a(A), b(B), c(C) {}
 	int opCode;
 	int a, b, c;
 };
@@ -73,16 +70,19 @@ int main(int argc, char* argv[])
 	// Part 2. Might not be generic but it worked with the program copied as comments below
 	registers.fill(0);
 	registers[0] = 1;
-	while(registers[ipRegister] != 2) // Wait until it computes the number we have to extract the factor of
+	while(registers[ipRegister] != 2) // Wait until it computes the number we have to extract the factors of
 	{
 		RunInstruction(program[registers[ipRegister]], registers);
 		++registers[ipRegister];
 	}
 	
 	long long total = 1 + registers[4];
-	for (int i = 2; i*i <= registers[4]; ++i)
+	int i = 2;
+	for (; i*i < registers[4]; ++i)
 		if (registers[4] % i == 0)
 			total += i + registers[4]/i;
+	if (i*i == registers[4] && registers[4] % i == 0)
+		total += i;
 
 	std::cout << "Part 2: " << total << std::endl;
 }
