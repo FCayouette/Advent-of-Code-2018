@@ -31,7 +31,8 @@ struct Voxel
 			++score;
 	}
 
-	bool operator<(const Voxel& v) const { return score > v.score || (score == v.score && (distance < v.distance || (distance == v.distance && scale < v.scale))); }
+	bool operator<(const Voxel& v) const { return score > v.score || (score == v.score && (distance < v.distance || (distance == v.distance && (scale < v.scale || (scale == v.scale &&
+		(minX < v.minX || (minX == v.minX && (minY < v.minY || (minY == v.minY && minZ < v.minZ))))))))); }
 
 	int minX, minY, minZ, maxX, maxY, maxZ; // Range values are inclusive
 	int score, scale, distance;
@@ -70,14 +71,7 @@ int main(int argc, char* argv[])
 		GrowToEncompass(minZ, maxZ, _c);
 	}
 	
-	int count = 0;
-	for (const Nanobot& b : bots)
-	{
-		if (bots[maxRangeBot].InRange(b))
-			++count;
-	}
-
-	std::cout << "Part 1: " << count << std::endl;
+	std::cout << "Part 1: " << std::count_if(bots.cbegin(), bots.cend(), [b = bots[maxRangeBot]](const Nanobot& n) { return b.InRange(n); }) << std::endl;
 
 	int maxDimension = std::max(maxX - minX, std::max(maxY - minY, maxZ - minZ));
 	int sampling = 1;
